@@ -1,0 +1,33 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Moon shape for sleep -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,27
+        C42,27 32,37 32,49
+        C32,61 42,71 54,71
+        C58,71 62,70 65,68
+        C58,68 52,61 52,52
+        C52,43 58,36 65,36
+        C62,34 58,33 54,33
+        C46,33 40,40 40,49
+        C40,58 46,65 54,65
+        C60,65 65,61 67,55
+        C64,63 57,69 49,69
+        C39,69 31,60 31,49
+        C31,38 39,29 49,29
+        C55,29 60,32 63,36
+        C60,30 57,27 54,27Z"/>
+    <!-- Z for sleep -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M68,40 L78,40 L70,50 L78,50 L78,52 L68,52 L76,42 L68,42 Z"
+        android:strokeWidth="0"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M72,55 L80,55 L74,63 L80,63 L80,65 L72,65 L78,57 L72,57 Z"
+        android:strokeWidth="0"/>
+</vector>
