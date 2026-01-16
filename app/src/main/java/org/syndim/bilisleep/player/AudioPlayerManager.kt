@@ -131,7 +131,8 @@ class AudioPlayerManager @Inject constructor(
     }
     
     /**
-     * Set playlist and start playing from index
+     * Set playlist and start playing from index.
+     * Automatically starts the sleep timer with saved duration.
      */
     fun setPlaylist(items: List<PlaylistItem>, startIndex: Int = 0) {
         _playerState.update { 
@@ -150,6 +151,10 @@ class AudioPlayerManager @Inject constructor(
                 prepare()
                 playWhenReady = true
             }
+            
+            // Auto-start sleep timer with saved duration
+            val savedDuration = _playerState.value.sleepTimer.durationMinutes
+            startSleepTimer(savedDuration)
         }
     }
     

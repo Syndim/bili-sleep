@@ -11,11 +11,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.syndim.bilisleep.data.model.SleepTimerSettings
 
+/**
+ * Dialog for configuring sleep timer settings.
+ * The timer auto-starts when playback begins, so this dialog only sets the duration.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SleepTimerDialog(
     currentSettings: SleepTimerSettings,
-    onStartTimer: (Int) -> Unit,
+    onSaveSettings: (durationMinutes: Int, fadeOutEnabled: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     var selectedDuration by remember { mutableIntStateOf(currentSettings.durationMinutes) }
@@ -24,7 +28,7 @@ fun SleepTimerDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text("Sleep Timer")
+            Text("Sleep Timer Settings")
         },
         text = {
             Column(
@@ -75,13 +79,20 @@ fun SleepTimerDialog(
                         onCheckedChange = { fadeOutEnabled = it }
                     )
                 }
+                
+                // Info text about auto-start
+                Text(
+                    text = "Timer starts automatically when playback begins",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         },
         confirmButton = {
             Button(
-                onClick = { onStartTimer(selectedDuration) }
+                onClick = { onSaveSettings(selectedDuration, fadeOutEnabled) }
             ) {
-                Text("Start Timer")
+                Text("Save")
             }
         },
         dismissButton = {
