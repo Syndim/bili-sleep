@@ -3,31 +3,74 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Moon shape for sleep -->
+
+    <!-- Bilibili TV character sleeping in bed -->
+
+    <!-- Bed frame - base -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,27
-        C42,27 32,37 32,49
-        C32,61 42,71 54,71
-        C58,71 62,70 65,68
-        C58,68 52,61 52,52
-        C52,43 58,36 65,36
-        C62,34 58,33 54,33
-        C46,33 40,40 40,49
-        C40,58 46,65 54,65
-        C60,65 65,61 67,55
-        C64,63 57,69 49,69
-        C39,69 31,60 31,49
-        C31,38 39,29 49,29
-        C55,29 60,32 63,36
-        C60,30 57,27 54,27Z"/>
-    <!-- Z for sleep -->
+        android:pathData="M24,58 L24,72 L84,72 L84,58 Q84,54 80,54 L28,54 Q24,54 24,58 Z"/>
+
+    <!-- Bed blanket - wavy top edge for cozy look -->
+    <path
+        android:fillColor="#E8E8E8"
+        android:pathData="M26,56 Q34,52 42,56 Q50,60 58,56 Q66,52 74,56 L82,56 L82,70 L26,70 Z"/>
+
+    <!-- Pillow -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M68,40 L78,40 L70,50 L78,50 L78,52 L68,52 L76,42 L68,42 Z"
-        android:strokeWidth="0"/>
+        android:pathData="M28,48 Q28,42 34,42 L48,42 Q54,42 54,48 L54,56 L28,56 Z"/>
+
+    <!-- Bilibili TV face peeking above blanket -->
+    <!-- TV head - rounded rectangle -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M72,55 L80,55 L74,63 L80,63 L80,65 L72,65 L78,57 L72,57 Z"
-        android:strokeWidth="0"/>
+        android:pathData="M58,36 Q58,32 62,32 L78,32 Q82,32 82,36 L82,52 Q82,56 78,56 L62,56 Q58,56 58,52 Z"/>
+
+    <!-- TV antenna left -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M63,32 L60,26 L64,26 L66,32"/>
+
+    <!-- TV antenna right -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M74,32 L72,26 L76,26 L78,32"/>
+
+    <!-- Closed sleeping eyes (curved lines) - left eye -->
+    <path
+        android:strokeColor="#FB7299"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M64,42 Q66,45 68,42"/>
+
+    <!-- Closed sleeping eyes - right eye -->
+    <path
+        android:strokeColor="#FB7299"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M72,42 Q74,45 76,42"/>
+
+    <!-- Small smile -->
+    <path
+        android:strokeColor="#FB7299"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:pathData="M68,48 Q70,50 72,48"/>
+
+    <!-- Zzz floating above -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M44,30 L51,30 L44,38 L51,38"/>
+
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M36,22 L41,22 L36,28 L41,28"/>
+
 </vector>
