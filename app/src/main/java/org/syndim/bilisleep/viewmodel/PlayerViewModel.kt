@@ -268,7 +268,7 @@ class PlayerViewModel @Inject constructor(
     }
     
     /**
-     * Save sleep timer settings and restart timer if currently active
+     * Save sleep timer settings and start/restart the timer
      */
     fun saveSleepTimerSettings(durationMinutes: Int, fadeOutEnabled: Boolean) {
         _showSleepTimerDialog.value = false
@@ -279,20 +279,17 @@ class PlayerViewModel @Inject constructor(
             sleepTimerPreferences.saveFadeOutEnabled(fadeOutEnabled)
         }
         
-        // Update current settings and restart timer with new duration if active
+        // Update fade out setting
         val currentSettings = playerState.value.sleepTimer
-        if (currentSettings.enabled) {
-            // Restart timer with new duration
-            playerManager.startSleepTimer(durationMinutes)
-        } else {
-            // Just update settings for next playback
-            playerManager.updateSleepTimerSettings(
-                currentSettings.copy(
-                    durationMinutes = durationMinutes,
-                    fadeOutEnabled = fadeOutEnabled
-                )
+        playerManager.updateSleepTimerSettings(
+            currentSettings.copy(
+                durationMinutes = durationMinutes,
+                fadeOutEnabled = fadeOutEnabled
             )
-        }
+        )
+        
+        // Always start/restart the timer with the new duration
+        playerManager.startSleepTimer(durationMinutes)
     }
     
     /**

@@ -127,7 +127,6 @@ fun MiniPlayer(
 @Composable
 fun SleepTimerIndicator(
     remainingMillis: Long,
-    onAddTime: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -156,18 +155,6 @@ fun SleepTimerIndicator(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
-            
-            IconButton(
-                onClick = onAddTime,
-                modifier = Modifier.size(24.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Add 5 minutes",
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
             
             IconButton(
                 onClick = onCancel,

@@ -60,7 +60,6 @@ fun PlayerScreen(
                     if (playerState.sleepTimer.enabled) {
                         SleepTimerIndicator(
                             remainingMillis = playerState.sleepTimer.remainingMillis,
-                            onAddTime = { viewModel.addTimeToSleepTimer(5) },
                             onCancel = viewModel::stopSleepTimer,
                             modifier = Modifier.padding(end = 4.dp)
                         )

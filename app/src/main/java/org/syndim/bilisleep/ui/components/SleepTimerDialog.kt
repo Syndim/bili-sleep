@@ -13,7 +13,7 @@ import org.syndim.bilisleep.data.model.SleepTimerSettings
 
 /**
  * Dialog for configuring sleep timer settings.
- * The timer auto-starts when playback begins, so this dialog only sets the duration.
+ * Shows "Start Timer" when timer is stopped, "Save" when timer is active.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -24,6 +24,7 @@ fun SleepTimerDialog(
 ) {
     var selectedDuration by remember { mutableIntStateOf(currentSettings.durationMinutes) }
     var fadeOutEnabled by remember { mutableStateOf(currentSettings.fadeOutEnabled) }
+    val isTimerActive = currentSettings.enabled
     
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -80,9 +81,13 @@ fun SleepTimerDialog(
                     )
                 }
                 
-                // Info text about auto-start
+                // Info text about timer status
                 Text(
-                    text = "Timer starts automatically when playback begins",
+                    text = if (isTimerActive) {
+                        "Timer is currently running"
+                    } else {
+                        "Timer starts automatically when playback begins"
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -92,7 +97,7 @@ fun SleepTimerDialog(
             Button(
                 onClick = { onSaveSettings(selectedDuration, fadeOutEnabled) }
             ) {
-                Text("Save")
+                Text(if (isTimerActive) "Save" else "Start Timer")
             }
         },
         dismissButton = {
