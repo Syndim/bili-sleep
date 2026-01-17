@@ -137,11 +137,12 @@ class BiliRepository @Inject constructor(
     }
     
     /**
-     * Prepare playlist item with audio URL
+     * Prepare playlist items for all pages of a video
+     * Returns a list of PlaylistItems, one for each page/part
      */
-    suspend fun preparePlaylistItem(item: VideoSearchItem): Result<PlaylistItem> = withContext(Dispatchers.IO) {
+    suspend fun preparePlaylistItems(item: VideoSearchItem): Result<List<PlaylistItem>> = withContext(Dispatchers.IO) {
         try {
-            // First get video info to get cid
+            // First get video info to get all pages
             val videoInfoResult = if (item.bvid.isNotBlank()) {
                 getVideoInfo(item.bvid)
             } else {
@@ -150,24 +151,70 @@ class BiliRepository @Inject constructor(
             
             videoInfoResult.fold(
                 onSuccess = { videoInfo ->
-                    val cid = videoInfo.cid
-                    val audioResult = getAudioUrl(videoInfo.bvid, cid)
+                    val pages = videoInfo.pages
+                    val totalParts = pages?.size ?: 1
                     
-                    audioResult.fold(
-                        onSuccess = { audioUrl ->
-                            val playlistItem = PlaylistItem.fromVideoInfo(videoInfo).copy(
-                                audioUrl = audioUrl
+                    if (pages.isNullOrEmpty() || pages.size == 1) {
+                        // Single part video - use the original method logic
+                        val cid = videoInfo.cid
+                        val audioResult = getAudioUrl(videoInfo.bvid, cid)
+                        
+                        audioResult.fold(
+                            onSuccess = { audioUrl ->
+                                val playlistItem = PlaylistItem.fromVideoInfo(videoInfo).copy(
+                                    audioUrl = audioUrl
+                                )
+                                Result.success(listOf(playlistItem))
+                            },
+                            onFailure = { Result.failure(it) }
+                        )
+                    } else {
+                        // Multi-part video - create a PlaylistItem for each page
+                        val playlistItems = mutableListOf<PlaylistItem>()
+                        
+                        for (page in pages) {
+                            val audioResult = getAudioUrl(videoInfo.bvid, page.cid)
+                            audioResult.fold(
+                                onSuccess = { audioUrl ->
+                                    val playlistItem = PlaylistItem.fromVideoInfoAndPage(
+                                        videoInfo, page, totalParts
+                                    ).copy(audioUrl = audioUrl)
+                                    playlistItems.add(playlistItem)
+                                },
+                                onFailure = {
+                                    // Skip failed parts but continue with others
+                                }
                             )
-                            Result.success(playlistItem)
-                        },
-                        onFailure = { Result.failure(it) }
-                    )
+                        }
+                        
+                        if (playlistItems.isNotEmpty()) {
+                            Result.success(playlistItems)
+                        } else {
+                            Result.failure(Exception("Failed to load any parts"))
+                        }
+                    }
                 },
                 onFailure = { Result.failure(it) }
             )
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+    
+    /**
+     * Prepare playlist item with audio URL (returns only first part for compatibility)
+     */
+    suspend fun preparePlaylistItem(item: VideoSearchItem): Result<PlaylistItem> = withContext(Dispatchers.IO) {
+        preparePlaylistItems(item).fold(
+            onSuccess = { items ->
+                if (items.isNotEmpty()) {
+                    Result.success(items.first())
+                } else {
+                    Result.failure(Exception("No items prepared"))
+                }
+            },
+            onFailure = { Result.failure(it) }
+        )
     }
     
     /**

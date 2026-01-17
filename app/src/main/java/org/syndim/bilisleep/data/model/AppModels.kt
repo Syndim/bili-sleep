@@ -11,8 +11,24 @@ data class PlaylistItem(
     val author: String,
     val coverUrl: String,
     val duration: Long, // in seconds
-    val audioUrl: String = ""
+    val audioUrl: String = "",
+    val partNumber: Int = 1,      // Part number (1-based)
+    val totalParts: Int = 1,      // Total number of parts in the video
+    val partTitle: String? = null // Part title (null if single part)
 ) {
+    /**
+     * Get display title - includes part info for multi-part videos
+     */
+    fun getDisplayTitle(): String {
+        return if (totalParts > 1 && !partTitle.isNullOrBlank()) {
+            "$title - $partTitle"
+        } else if (totalParts > 1) {
+            "$title (P$partNumber)"
+        } else {
+            title
+        }
+    }
+    
     companion object {
         fun fromVideoSearchItem(item: VideoSearchItem, cid: Long = 0): PlaylistItem {
             return PlaylistItem(
@@ -34,7 +50,26 @@ data class PlaylistItem(
                 title = info.title,
                 author = info.owner?.name ?: "",
                 coverUrl = info.getCoverUrl(),
-                duration = info.duration
+                duration = info.duration,
+                totalParts = info.pages?.size ?: 1
+            )
+        }
+        
+        /**
+         * Create a PlaylistItem from a VideoInfo and a specific page
+         */
+        fun fromVideoInfoAndPage(info: VideoInfo, page: VideoPage, totalParts: Int): PlaylistItem {
+            return PlaylistItem(
+                bvid = info.bvid,
+                aid = info.aid,
+                cid = page.cid,
+                title = info.title,
+                author = info.owner?.name ?: "",
+                coverUrl = info.getCoverUrl(),
+                duration = page.duration,
+                partNumber = page.page,
+                totalParts = totalParts,
+                partTitle = page.part.takeIf { it.isNotBlank() }
             )
         }
     }

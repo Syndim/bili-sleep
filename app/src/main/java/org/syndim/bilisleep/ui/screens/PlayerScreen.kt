@@ -1,10 +1,14 @@
 package org.syndim.bilisleep.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -22,6 +26,26 @@ import org.syndim.bilisleep.data.model.PlaylistItem
 import org.syndim.bilisleep.ui.components.SleepTimerDialog
 import org.syndim.bilisleep.ui.components.SleepTimerIndicator
 import org.syndim.bilisleep.viewmodel.PlayerViewModel
+
+/**
+ * Represents a group of playlist items from the same video
+ */
+private data class VideoGroup(
+    val bvid: String,
+    val title: String,
+    val author: String,
+    val coverUrl: String,
+    val parts: List<PlaylistItemWithIndex>,
+    val isMultiPart: Boolean
+)
+
+/**
+ * PlaylistItem with its original index in the playlist
+ */
+private data class PlaylistItemWithIndex(
+    val item: PlaylistItem,
+    val playlistIndex: Int
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,6 +106,12 @@ fun PlayerScreen(
                 .padding(paddingValues)
         ) {
             if (currentItem != null) {
+                // Compute grouped items outside LazyColumn
+                val upNextItems = playerState.playlist.drop(playerState.currentIndex + 1)
+                val groupedItems = remember(upNextItems, playerState.currentIndex) {
+                    groupPlaylistItems(upNextItems, playerState.currentIndex + 1)
+                }
+                
                 // Scrollable content: cover, title, and playlist
                 LazyColumn(
                     modifier = Modifier
@@ -113,7 +143,7 @@ fun PlayerScreen(
                             
                             // Title
                             Text(
-                                text = currentItem.title,
+                                text = currentItem.getDisplayTitle(),
                                 style = MaterialTheme.typography.titleLarge,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
@@ -140,7 +170,7 @@ fun PlayerScreen(
                             )
                             
                             Text(
-                                text = "Up Next (${playerState.playlist.size - playerState.currentIndex - 1} items)",
+                                text = "Up Next (${upNextItems.size} items)",
                                 style = MaterialTheme.typography.titleSmall,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -148,15 +178,14 @@ fun PlayerScreen(
                             )
                         }
                         
-                        itemsIndexed(
-                            items = playerState.playlist.drop(playerState.currentIndex + 1),
-                            key = { _, item -> item.bvid }
-                        ) { index, item ->
-                            PlaylistItemRow(
-                                item = item,
-                                isPlaying = false,
-                                onClick = { 
-                                    viewModel.playAtIndex(playerState.currentIndex + 1 + index) 
+                        items(
+                            items = groupedItems,
+                            key = { it.bvid }
+                        ) { group ->
+                            VideoGroupItem(
+                                group = group,
+                                onPlayPart = { playlistIndex ->
+                                    viewModel.playAtIndex(playlistIndex)
                                 }
                             )
                         }
@@ -279,62 +308,6 @@ fun PlayerScreen(
     }
 }
 
-@Composable
-private fun PlaylistItemRow(
-    item: PlaylistItem,
-    isPlaying: Boolean,
-    onClick: () -> Unit
-) {
-    ListItem(
-        headlineContent = {
-            Text(
-                text = item.title,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = if (isPlaying) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                }
-            )
-        },
-        supportingContent = {
-            Text(
-                text = "${item.author} • ${formatTime(item.duration * 1000)}",
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        leadingContent = {
-            AsyncImage(
-                model = item.coverUrl,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(4.dp)),
-                contentScale = ContentScale.Crop
-            )
-        },
-        trailingContent = {
-            if (isPlaying) {
-                Icon(
-                    imageVector = Icons.Default.GraphicEq,
-                    contentDescription = "Playing",
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-        },
-        modifier = Modifier.fillMaxWidth(),
-        colors = ListItemDefaults.colors(
-            containerColor = if (isPlaying) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
-        )
-    )
-}
-
 private fun formatTime(millis: Long): String {
     val totalSeconds = millis / 1000
     val hours = totalSeconds / 3600
@@ -346,4 +319,158 @@ private fun formatTime(millis: Long): String {
     } else {
         String.format("%d:%02d", minutes, seconds)
     }
+}
+
+/**
+ * Group playlist items by video (bvid)
+ */
+private fun groupPlaylistItems(items: List<PlaylistItem>, startIndex: Int): List<VideoGroup> {
+    val groups = mutableListOf<VideoGroup>()
+    var currentIndex = startIndex
+    
+    items.groupBy { it.bvid }.forEach { (bvid, parts) ->
+        val firstPart = parts.first()
+        val partsWithIndex = parts.map { part ->
+            val index = currentIndex
+            currentIndex++
+            PlaylistItemWithIndex(part, index)
+        }
+        
+        groups.add(
+            VideoGroup(
+                bvid = bvid,
+                title = firstPart.title,
+                author = firstPart.author,
+                coverUrl = firstPart.coverUrl,
+                parts = partsWithIndex,
+                isMultiPart = parts.size > 1
+            )
+        )
+    }
+    
+    return groups
+}
+
+@Composable
+private fun VideoGroupItem(
+    group: VideoGroup,
+    onPlayPart: (Int) -> Unit
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+    
+    Column {
+        // Main video row
+        ListItem(
+            headlineContent = {
+                Text(
+                    text = group.title,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
+            supportingContent = {
+                val partsInfo = if (group.isMultiPart) {
+                    "${group.parts.size} parts • ${group.author}"
+                } else {
+                    "${group.author} • ${formatTime(group.parts.first().item.duration * 1000)}"
+                }
+                Text(
+                    text = partsInfo,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
+            leadingContent = {
+                AsyncImage(
+                    model = group.coverUrl,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(4.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            },
+            trailingContent = {
+                if (group.isMultiPart) {
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (isExpanded) "Collapse" else "Expand"
+                    )
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    if (group.isMultiPart) {
+                        isExpanded = !isExpanded
+                    } else {
+                        onPlayPart(group.parts.first().playlistIndex)
+                    }
+                }
+        )
+        
+        // Expandable parts list for multi-part videos
+        if (group.isMultiPart) {
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                ) {
+                    group.parts.forEach { partWithIndex ->
+                        PartItemRow(
+                            item = partWithIndex.item,
+                            onClick = { onPlayPart(partWithIndex.playlistIndex) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PartItemRow(
+    item: PlaylistItem,
+    onClick: () -> Unit
+) {
+    ListItem(
+        headlineContent = {
+            Text(
+                text = item.partTitle ?: "P${item.partNumber}",
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        },
+        supportingContent = {
+            Text(
+                text = formatTime(item.duration * 1000),
+                style = MaterialTheme.typography.bodySmall
+            )
+        },
+        leadingContent = {
+            Box(
+                modifier = Modifier.width(48.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "P${item.partNumber}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(start = 16.dp),
+        colors = ListItemDefaults.colors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        )
+    )
 }
