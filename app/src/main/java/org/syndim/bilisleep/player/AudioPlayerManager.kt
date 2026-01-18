@@ -238,17 +238,25 @@ class AudioPlayerManager @Inject constructor(
     fun togglePlayPause() {
         mediaController?.let {
             if (it.isPlaying) {
-                it.pause()
+                pause()
             } else {
-                it.play()
+                play()
             }
         }
     }
     
     /**
      * Play
+     * If the sleep timer had ended, automatically restart it with the saved duration
      */
     fun play() {
+        // Check if sleep timer had ended (enabled = false, remainingMillis = 0)
+        // and restart it when resuming playback
+        val sleepTimer = _playerState.value.sleepTimer
+        if (!sleepTimer.enabled && sleepTimer.remainingMillis <= 0 && sleepTimer.durationMinutes > 0) {
+            startSleepTimer(sleepTimer.durationMinutes)
+        }
+        
         mediaController?.play()
     }
     
