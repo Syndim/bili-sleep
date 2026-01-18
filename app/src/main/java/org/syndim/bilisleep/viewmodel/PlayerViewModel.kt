@@ -31,9 +31,60 @@ class PlayerViewModel @Inject constructor(
     private val _showSleepTimerDialog = MutableStateFlow(false)
     val showSleepTimerDialog: StateFlow<Boolean> = _showSleepTimerDialog.asStateFlow()
     
+    // Track which videos have had their remaining parts loaded (by bvid)
+    private val loadedRemainingParts = mutableSetOf<String>()
+    
     init {
         // Load saved sleep timer preferences
         loadSleepTimerPreferences()
+        // Observe track changes for lazy loading
+        observeTrackChanges()
+    }
+    
+    /**
+     * Observe track changes to lazy load remaining parts when a new video starts
+     */
+    private fun observeTrackChanges() {
+        viewModelScope.launch {
+            var previousBvid: String? = null
+            
+            playerState.collect { state ->
+                val currentItem = state.currentItem
+                if (currentItem != null && currentItem.bvid != previousBvid) {
+                    previousBvid = currentItem.bvid
+                    
+                    // Check if this is the first part of a multi-part video
+                    // and we haven't loaded remaining parts yet
+                    if (currentItem.partNumber == 1 && 
+                        currentItem.totalParts > 1 &&
+                        !loadedRemainingParts.contains(currentItem.bvid)) {
+                        loadRemainingPartsForCurrentVideo(currentItem.bvid)
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * Load remaining parts for the current video and insert them after the current item
+     */
+    private fun loadRemainingPartsForCurrentVideo(bvid: String) {
+        viewModelScope.launch {
+            // Mark as loading to prevent duplicate loads
+            loadedRemainingParts.add(bvid)
+            
+            repository.prepareRemainingParts(bvid).fold(
+                onSuccess = { remainingParts ->
+                    if (remainingParts.isNotEmpty()) {
+                        playerManager.insertAfterCurrent(remainingParts)
+                    }
+                },
+                onFailure = {
+                    // Remove from loaded set so it can be retried
+                    loadedRemainingParts.remove(bvid)
+                }
+            )
+        }
     }
     
     /**
@@ -59,15 +110,19 @@ class PlayerViewModel @Inject constructor(
     }
     
     /**
-     * Play a single video item (plays all parts if multi-part video)
+     * Play a single video item (lazy loads remaining parts when playback starts)
      */
     fun playVideo(item: VideoSearchItem) {
         viewModelScope.launch {
             _isPreparingPlaylist.value = true
             
-            repository.preparePlaylistItems(item).fold(
-                onSuccess = { playlistItems ->
-                    playerManager.setPlaylist(playlistItems, 0)
+            // Only load the first part initially
+            repository.prepareFirstPart(item).fold(
+                onSuccess = { playlistItem ->
+                    // Clear the loaded parts tracker for fresh playback
+                    loadedRemainingParts.clear()
+                    playerManager.setPlaylist(listOf(playlistItem), 0)
+                    // Remaining parts will be loaded automatically via observeTrackChanges
                 },
                 onFailure = { error ->
                     // Handle error - could emit to a separate error flow
@@ -81,7 +136,7 @@ class PlayerViewModel @Inject constructor(
     /**
      * Play multiple videos as playlist - starts playing immediately,
      * loads remaining items in background.
-     * Multi-part videos will have all their parts added to the playlist.
+     * Only loads the first part of each video; remaining parts are lazy loaded when played.
      */
     fun playPlaylist(items: List<VideoSearchItem>, startIndex: Int = 0) {
         if (items.isEmpty()) return
@@ -89,16 +144,20 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             _isPreparingPlaylist.value = true
             
-            // First, prepare and play the selected item immediately (all parts)
-            val selectedItem = items[startIndex]
-            val preparedItems = repository.preparePlaylistItems(selectedItem).getOrNull()
+            // Clear the loaded parts tracker for fresh playback
+            loadedRemainingParts.clear()
             
-            if (!preparedItems.isNullOrEmpty()) {
-                // Start playing immediately with the first video's parts
-                playerManager.setPlaylist(preparedItems, 0)
+            // First, prepare and play the selected item immediately (first part only)
+            val selectedItem = items[startIndex]
+            val preparedItem = repository.prepareFirstPart(selectedItem).getOrNull()
+            
+            if (preparedItem != null) {
+                // Start playing immediately with just the first part
+                playerManager.setPlaylist(listOf(preparedItem), 0)
                 _isPreparingPlaylist.value = false
                 
-                // Then load the rest of the playlist in background
+                // Remaining parts will be lazy loaded via observeTrackChanges
+                // Then load the rest of the playlist in background (first parts only)
                 loadRemainingPlaylistItems(items, startIndex)
             } else {
                 _isPreparingPlaylist.value = false
@@ -109,7 +168,7 @@ class PlayerViewModel @Inject constructor(
     
     /**
      * Load remaining playlist items in background and append to playlist.
-     * Each video may have multiple parts, all of which will be added.
+     * Only loads the first part of each video; remaining parts are lazy loaded when played.
      */
     private fun loadRemainingPlaylistItems(items: List<VideoSearchItem>, startIndex: Int) {
         viewModelScope.launch {
@@ -124,10 +183,10 @@ class PlayerViewModel @Inject constructor(
             
             // Load items after the current one first (more likely to be played next)
             for (item in itemsAfter) {
-                repository.preparePlaylistItems(item).fold(
-                    onSuccess = { playlistItems ->
-                        // Append all parts of this video
-                        playerManager.appendToPlaylist(playlistItems)
+                repository.prepareFirstPart(item).fold(
+                    onSuccess = { playlistItem ->
+                        // Append first part of this video
+                        playerManager.appendToPlaylist(listOf(playlistItem))
                     },
                     onFailure = {
                         // Skip failed items
@@ -139,9 +198,9 @@ class PlayerViewModel @Inject constructor(
             if (itemsBefore.isNotEmpty()) {
                 val preparedItemsBefore = mutableListOf<PlaylistItem>()
                 for (item in itemsBefore) {
-                    repository.preparePlaylistItems(item).fold(
-                        onSuccess = { playlistItems ->
-                            preparedItemsBefore.addAll(playlistItems)
+                    repository.prepareFirstPart(item).fold(
+                        onSuccess = { playlistItem ->
+                            preparedItemsBefore.add(playlistItem)
                         },
                         onFailure = {
                             // Skip failed items
@@ -158,24 +217,20 @@ class PlayerViewModel @Inject constructor(
     }
     
     /**
-     * Add items to current playlist (includes all parts for multi-part videos)
+     * Add items to current playlist (only first parts; remaining parts lazy loaded when played)
      */
     fun addToPlaylist(items: List<VideoSearchItem>) {
         viewModelScope.launch {
-            val currentPlaylist = playerState.value.playlist.toMutableList()
-            
             for (item in items) {
-                repository.preparePlaylistItems(item).fold(
-                    onSuccess = { playlistItems ->
-                        currentPlaylist.addAll(playlistItems)
+                repository.prepareFirstPart(item).fold(
+                    onSuccess = { playlistItem ->
+                        playerManager.appendToPlaylist(listOf(playlistItem))
                     },
                     onFailure = {
                         // Skip failed items
                     }
                 )
             }
-            
-            playerManager.setPlaylist(currentPlaylist, playerState.value.currentIndex)
         }
     }
     

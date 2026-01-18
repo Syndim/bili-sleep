@@ -20,11 +20,20 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
     
-    private fun generateBuvid3(): String {
-        // Generate a buvid3 cookie similar to Bilibili's format
-        val uuid = UUID.randomUUID().toString().replace("-", "")
-        val timestamp = System.currentTimeMillis()
-        return "${uuid}${timestamp}infoc"
+    // Generate buvid cookies once and reuse them
+    private val buvid3: String by lazy {
+        // Format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXXXXXXXinfoc
+        val uuid = UUID.randomUUID().toString().uppercase()
+        "${uuid}infoc"
+    }
+    
+    private val buvid4: String by lazy {
+        // Format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+        UUID.randomUUID().toString().uppercase()
+    }
+    
+    private val b_nut: String by lazy {
+        (System.currentTimeMillis() / 1000).toString()
     }
     
     @Provides
@@ -39,33 +48,36 @@ object NetworkModule {
             private val cookieStore = mutableMapOf<String, MutableList<Cookie>>()
             
             override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-                cookieStore[url.host] = cookies.toMutableList()
+                val host = url.host
+                val existing = cookieStore.getOrPut(host) { mutableListOf() }
+                // Update existing cookies or add new ones
+                cookies.forEach { newCookie ->
+                    existing.removeAll { it.name == newCookie.name }
+                    existing.add(newCookie)
+                }
             }
             
             override fun loadForRequest(url: HttpUrl): List<Cookie> {
-                // Add required Bilibili cookies
-                val cookies = cookieStore[url.host]?.toMutableList() ?: mutableListOf()
+                val cookies = cookieStore.getOrPut(url.host) { mutableListOf() }
                 
-                // Add buvid3 if not already present
-                if (cookies.none { it.name == "buvid3" }) {
-                    cookies.add(
-                        Cookie.Builder()
-                            .domain("bilibili.com")
-                            .name("buvid3")
-                            .value(generateBuvid3())
-                            .build()
-                    )
-                }
+                // Ensure required Bilibili cookies are present
+                val requiredCookies = listOf(
+                    Triple("buvid3", buvid3, "bilibili.com"),
+                    Triple("buvid4", buvid4, "bilibili.com"),
+                    Triple("b_nut", b_nut, "bilibili.com"),
+                )
                 
-                // Add b_nut timestamp if not already present
-                if (cookies.none { it.name == "b_nut" }) {
-                    cookies.add(
-                        Cookie.Builder()
-                            .domain("bilibili.com")
-                            .name("b_nut")
-                            .value((System.currentTimeMillis() / 1000).toString())
-                            .build()
-                    )
+                requiredCookies.forEach { (name, value, domain) ->
+                    if (cookies.none { it.name == name }) {
+                        cookies.add(
+                            Cookie.Builder()
+                                .domain(domain)
+                                .name(name)
+                                .value(value)
+                                .path("/")
+                                .build()
+                        )
+                    }
                 }
                 
                 return cookies
@@ -82,8 +94,13 @@ object NetworkModule {
                     .header("Origin", "https://www.bilibili.com")
                     .header("User-Agent", BiliApiService.DEFAULT_USER_AGENT)
                     .header("Accept", "application/json, text/plain, */*")
-                    .header("Accept-Language", "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7")
-                    // Don't set Accept-Encoding manually - let OkHttp handle it for automatic decompression
+                    .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+                    .header("sec-ch-ua", "\"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"")
+                    .header("sec-ch-ua-mobile", "?0")
+                    .header("sec-ch-ua-platform", "\"Windows\"")
+                    .header("Sec-Fetch-Dest", "empty")
+                    .header("Sec-Fetch-Mode", "cors")
+                    .header("Sec-Fetch-Site", "same-site")
                     .method(original.method, original.body)
                     .build()
                 chain.proceed(request)

@@ -137,6 +137,93 @@ class BiliRepository @Inject constructor(
     }
     
     /**
+     * Prepare only the first part of a video (for lazy loading)
+     * Returns a single PlaylistItem for the first part only
+     */
+    suspend fun prepareFirstPart(item: VideoSearchItem): Result<PlaylistItem> = withContext(Dispatchers.IO) {
+        try {
+            // First get video info
+            val videoInfoResult = if (item.bvid.isNotBlank()) {
+                getVideoInfo(item.bvid)
+            } else {
+                getVideoInfoByAid(item.aid)
+            }
+            
+            videoInfoResult.fold(
+                onSuccess = { videoInfo ->
+                    val totalParts = videoInfo.pages?.size ?: 1
+                    val firstPage = videoInfo.pages?.firstOrNull()
+                    
+                    val cid = firstPage?.cid ?: videoInfo.cid
+                    val audioResult = getAudioUrl(videoInfo.bvid, cid)
+                    
+                    audioResult.fold(
+                        onSuccess = { audioUrl ->
+                            val playlistItem = if (firstPage != null && totalParts > 1) {
+                                PlaylistItem.fromVideoInfoAndPage(videoInfo, firstPage, totalParts)
+                            } else {
+                                PlaylistItem.fromVideoInfo(videoInfo)
+                            }.copy(audioUrl = audioUrl)
+                            Result.success(playlistItem)
+                        },
+                        onFailure = { Result.failure(it) }
+                    )
+                },
+                onFailure = { Result.failure(it) }
+            )
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Prepare remaining parts of a video (parts 2 and onwards)
+     * Call this when the first part starts playing to lazy load the rest
+     * @param bvid The video's bvid
+     * @return List of PlaylistItems for parts 2 onwards, empty if single-part video
+     */
+    suspend fun prepareRemainingParts(bvid: String): Result<List<PlaylistItem>> = withContext(Dispatchers.IO) {
+        try {
+            val videoInfoResult = getVideoInfo(bvid)
+            
+            videoInfoResult.fold(
+                onSuccess = { videoInfo ->
+                    val pages = videoInfo.pages
+                    val totalParts = pages?.size ?: 1
+                    
+                    if (pages.isNullOrEmpty() || pages.size <= 1) {
+                        // Single part video - no remaining parts
+                        Result.success(emptyList())
+                    } else {
+                        // Multi-part video - load parts 2 onwards
+                        val remainingParts = mutableListOf<PlaylistItem>()
+                        
+                        for (page in pages.drop(1)) { // Skip first part
+                            val audioResult = getAudioUrl(videoInfo.bvid, page.cid)
+                            audioResult.fold(
+                                onSuccess = { audioUrl ->
+                                    val playlistItem = PlaylistItem.fromVideoInfoAndPage(
+                                        videoInfo, page, totalParts
+                                    ).copy(audioUrl = audioUrl)
+                                    remainingParts.add(playlistItem)
+                                },
+                                onFailure = {
+                                    // Skip failed parts but continue with others
+                                }
+                            )
+                        }
+                        
+                        Result.success(remainingParts)
+                    }
+                },
+                onFailure = { Result.failure(it) }
+            )
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    /**
      * Prepare playlist items for all pages of a video
      * Returns a list of PlaylistItems, one for each page/part
      */

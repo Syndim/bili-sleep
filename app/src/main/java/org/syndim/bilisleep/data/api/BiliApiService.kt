@@ -22,7 +22,7 @@ interface BiliApiService {
         @Query("search_type") searchType: String = "video",
         @Query("page") page: Int = 1,
         @Query("page_size") pageSize: Int = 20,
-        @Query("order") order: String = "totalrank",
+        @Query("order") order: String = "pubdate", // pubdate: newest first, totalrank: by relevance
         @Header("Referer") referer: String = "https://www.bilibili.com",
         @Header("User-Agent") userAgent: String = DEFAULT_USER_AGENT
     ): BiliResponse<SearchResult>

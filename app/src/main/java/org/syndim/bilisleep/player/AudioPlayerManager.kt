@@ -195,6 +195,27 @@ class AudioPlayerManager @Inject constructor(
     }
     
     /**
+     * Insert items right after the current item
+     * Used for lazy loading remaining parts of a multi-part video
+     */
+    fun insertAfterCurrent(items: List<PlaylistItem>) {
+        if (items.isEmpty()) return
+        
+        val currentIndex = _playerState.value.currentIndex
+        val insertPosition = currentIndex + 1
+        
+        _playerState.update { state ->
+            val newPlaylist = state.playlist.toMutableList()
+            newPlaylist.addAll(insertPosition, items)
+            state.copy(playlist = newPlaylist)
+        }
+        
+        // Insert after current item in MediaController's playlist
+        val mediaItems = items.map { it.toMediaItem() }
+        mediaController?.addMediaItems(insertPosition, mediaItems)
+    }
+    
+    /**
      * Play item at specific index
      */
     fun playAtIndex(index: Int) {
