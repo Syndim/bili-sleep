@@ -361,11 +361,12 @@ class PlayerViewModel @Inject constructor(
         playerManager.updateSleepTimerSettings(settings)
     }
     
-    /**
-     * Clear error
-     */
     fun clearError() {
         playerManager.clearError()
+    }
+    
+    fun clearSleepTimerEndedFlag() {
+        playerManager.clearSleepTimerEndedFlag()
     }
     
     override fun onCleared() {

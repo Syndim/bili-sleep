@@ -9,6 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import org.syndim.bilisleep.BuildConfig
 import org.syndim.bilisleep.data.model.SleepTimerSettings
 
 /**
@@ -42,11 +43,17 @@ fun SleepTimerDialog(
                 )
                 
                 // Duration options
+                val durations = if (BuildConfig.DEBUG) {
+                    listOf(1) + SleepTimerSettings.PRESET_DURATIONS
+                } else {
+                    SleepTimerSettings.PRESET_DURATIONS
+                }
+                
                 LazyColumn(
                     modifier = Modifier.height(200.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(SleepTimerSettings.PRESET_DURATIONS) { duration ->
+                    items(durations) { duration ->
                         DurationOption(
                             duration = duration,
                             isSelected = selectedDuration == duration,

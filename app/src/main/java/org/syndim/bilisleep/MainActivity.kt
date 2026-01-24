@@ -31,6 +31,7 @@ import org.syndim.bilisleep.ui.navigation.BiliSleepNavHost
 import org.syndim.bilisleep.ui.navigation.Screen
 import org.syndim.bilisleep.ui.theme.BiliSleepTheme
 import org.syndim.bilisleep.viewmodel.PlayerViewModel
+import org.syndim.bilisleep.viewmodel.SearchViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -60,10 +61,19 @@ class MainActivity : ComponentActivity() {
             BiliSleepTheme {
                 val navController = rememberNavController()
                 val playerViewModel: PlayerViewModel = hiltViewModel()
+                val searchViewModel: SearchViewModel = hiltViewModel()
                 val playerState by playerViewModel.playerState.collectAsState()
                 
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
+                
+                LaunchedEffect(playerState.sleepTimer.justEnded) {
+                    if (playerState.sleepTimer.justEnded) {
+                        navController.popBackStack(Screen.Search.route, inclusive = false)
+                        searchViewModel.clearSearch()
+                        playerViewModel.clearSleepTimerEndedFlag()
+                    }
+                }
                 
                 // Handle navigation to player screen from notification
                 val openPlayer by remember { shouldOpenPlayer }

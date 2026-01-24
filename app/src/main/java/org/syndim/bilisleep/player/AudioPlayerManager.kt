@@ -335,7 +335,8 @@ class AudioPlayerManager @Inject constructor(
                 sleepTimer = it.sleepTimer.copy(
                     enabled = true,
                     durationMinutes = durationMinutes,
-                    remainingMillis = durationMillis
+                    remainingMillis = durationMillis,
+                    justEnded = false
                 )
             )
         }
@@ -415,9 +416,6 @@ class AudioPlayerManager @Inject constructor(
         }
     }
     
-    /**
-     * Handle sleep timer end
-     */
     private fun onSleepTimerEnd() {
         pause()
         setVolume(1f)
@@ -426,7 +424,8 @@ class AudioPlayerManager @Inject constructor(
             it.copy(
                 sleepTimer = it.sleepTimer.copy(
                     enabled = false,
-                    remainingMillis = 0
+                    remainingMillis = 0,
+                    justEnded = true
                 )
             )
         }
@@ -435,9 +434,6 @@ class AudioPlayerManager @Inject constructor(
         fadeOutJob = null
     }
     
-    /**
-     * Add time to sleep timer
-     */
     fun addTimeToSleepTimer(minutes: Int) {
         val addMillis = minutes * 60 * 1000L
         _playerState.update {
@@ -445,6 +441,14 @@ class AudioPlayerManager @Inject constructor(
                 sleepTimer = it.sleepTimer.copy(
                     remainingMillis = it.sleepTimer.remainingMillis + addMillis
                 )
+            )
+        }
+    }
+    
+    fun clearSleepTimerEndedFlag() {
+        _playerState.update {
+            it.copy(
+                sleepTimer = it.sleepTimer.copy(justEnded = false)
             )
         }
     }

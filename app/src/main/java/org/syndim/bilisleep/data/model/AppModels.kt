@@ -84,7 +84,8 @@ data class SleepTimerSettings(
     val remainingMillis: Long = 0,
     val pauseAtEnd: Boolean = true,
     val fadeOutEnabled: Boolean = true,
-    val fadeOutDurationSeconds: Int = 10
+    val fadeOutDurationSeconds: Int = 10,
+    val justEnded: Boolean = false // True when timer just ended (for one-shot navigation trigger)
 ) {
     companion object {
         val PRESET_DURATIONS = listOf(15, 30, 45, 60, 90, 120)
