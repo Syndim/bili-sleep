@@ -2,7 +2,6 @@ package org.syndim.bilisleep.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import org.syndim.bilisleep.data.model.PlaylistItem
 import org.syndim.bilisleep.data.model.PlayerState
 import org.syndim.bilisleep.data.model.SleepTimerSettings
 import org.syndim.bilisleep.data.model.VideoSearchItem
@@ -34,6 +33,13 @@ class PlayerViewModel @Inject constructor(
     // Track which videos have had their remaining parts loaded (by bvid)
     private val loadedRemainingParts = mutableSetOf<String>()
     
+    // Pending playlist items that haven't had their URLs loaded yet
+    // Key: index in the logical playlist, Value: VideoSearchItem to load
+    private val pendingPlaylistItems = mutableMapOf<Int, VideoSearchItem>()
+    
+    // Track which playlist indices have been loaded (by their logical index)
+    private val loadedPlaylistIndices = mutableSetOf<Int>()
+    
     init {
         // Load saved sleep timer preferences
         loadSleepTimerPreferences()
@@ -43,13 +49,22 @@ class PlayerViewModel @Inject constructor(
     
     /**
      * Observe track changes to lazy load remaining parts when a new video starts
+     * and preload the next item's URL
      */
     private fun observeTrackChanges() {
         viewModelScope.launch {
             var previousBvid: String? = null
+            var previousIndex: Int? = null
             
             playerState.collect { state ->
                 val currentItem = state.currentItem
+                val currentIndex = state.currentIndex
+                
+                if (currentIndex != previousIndex) {
+                    previousIndex = currentIndex
+                    preloadNextItem(currentIndex + 1)
+                }
+                
                 if (currentItem != null && currentItem.bvid != previousBvid) {
                     previousBvid = currentItem.bvid
                     
@@ -62,6 +77,29 @@ class PlayerViewModel @Inject constructor(
                     }
                 }
             }
+        }
+    }
+    
+    /**
+     * Preload the URL for a pending playlist item at the given index
+     */
+    private fun preloadNextItem(index: Int) {
+        val pendingItem = pendingPlaylistItems[index] ?: return
+        if (loadedPlaylistIndices.contains(index)) return
+        
+        viewModelScope.launch {
+            loadedPlaylistIndices.add(index)
+            pendingPlaylistItems.remove(index)
+            
+            repository.prepareFirstPart(pendingItem).fold(
+                onSuccess = { playlistItem ->
+                    playerManager.appendToPlaylist(listOf(playlistItem))
+                },
+                onFailure = {
+                    // Remove from loaded set so it can be retried
+                    loadedPlaylistIndices.remove(index)
+                }
+            )
         }
     }
     
@@ -116,16 +154,15 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             _isPreparingPlaylist.value = true
             
-            // Only load the first part initially
+            loadedRemainingParts.clear()
+            pendingPlaylistItems.clear()
+            loadedPlaylistIndices.clear()
+            
             repository.prepareFirstPart(item).fold(
                 onSuccess = { playlistItem ->
-                    // Clear the loaded parts tracker for fresh playback
-                    loadedRemainingParts.clear()
                     playerManager.setPlaylist(listOf(playlistItem), 0)
-                    // Remaining parts will be loaded automatically via observeTrackChanges
                 },
                 onFailure = { error ->
-                    // Handle error - could emit to a separate error flow
                 }
             )
             
@@ -134,9 +171,8 @@ class PlayerViewModel @Inject constructor(
     }
     
     /**
-     * Play multiple videos as playlist - starts playing immediately,
-     * loads remaining items in background.
-     * Only loads the first part of each video; remaining parts are lazy loaded when played.
+     * Play multiple videos as playlist - starts playing immediately.
+     * Only loads URLs for current and next item; remaining items are lazy loaded when needed.
      */
     fun playPlaylist(items: List<VideoSearchItem>, startIndex: Int = 0) {
         if (items.isEmpty()) return
@@ -144,94 +180,51 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             _isPreparingPlaylist.value = true
             
-            // Clear the loaded parts tracker for fresh playback
             loadedRemainingParts.clear()
+            pendingPlaylistItems.clear()
+            loadedPlaylistIndices.clear()
             
-            // First, prepare and play the selected item immediately (first part only)
             val selectedItem = items[startIndex]
             val preparedItem = repository.prepareFirstPart(selectedItem).getOrNull()
             
             if (preparedItem != null) {
-                // Start playing immediately with just the first part
+                loadedPlaylistIndices.add(startIndex)
                 playerManager.setPlaylist(listOf(preparedItem), 0)
                 _isPreparingPlaylist.value = false
                 
-                // Remaining parts will be lazy loaded via observeTrackChanges
-                // Then load the rest of the playlist in background (first parts only)
-                loadRemainingPlaylistItems(items, startIndex)
+                storePendingItems(items, startIndex)
+                preloadNextItem(startIndex + 1)
             } else {
                 _isPreparingPlaylist.value = false
-                // Handle error - could try next item or show error
             }
         }
     }
     
     /**
-     * Load remaining playlist items in background and append to playlist.
-     * Only loads the first part of each video; remaining parts are lazy loaded when played.
+     * Store remaining playlist items as pending for lazy loading
      */
-    private fun loadRemainingPlaylistItems(items: List<VideoSearchItem>, startIndex: Int) {
-        viewModelScope.launch {
-            // Items before the start index
-            val itemsBefore = items.subList(0, startIndex)
-            // Items after the start index
-            val itemsAfter = if (startIndex + 1 < items.size) {
-                items.subList(startIndex + 1, items.size)
-            } else {
-                emptyList()
-            }
-            
-            // Load items after the current one first (more likely to be played next)
-            for (item in itemsAfter) {
-                repository.prepareFirstPart(item).fold(
-                    onSuccess = { playlistItem ->
-                        // Append first part of this video
-                        playerManager.appendToPlaylist(listOf(playlistItem))
-                    },
-                    onFailure = {
-                        // Skip failed items
-                    }
-                )
-            }
-            
-            // Then load items before (for "previous" functionality)
-            if (itemsBefore.isNotEmpty()) {
-                val preparedItemsBefore = mutableListOf<PlaylistItem>()
-                for (item in itemsBefore) {
-                    repository.prepareFirstPart(item).fold(
-                        onSuccess = { playlistItem ->
-                            preparedItemsBefore.add(playlistItem)
-                        },
-                        onFailure = {
-                            // Skip failed items
-                        }
-                    )
-                }
-                
-                // Insert all items before at the beginning of the playlist
-                if (preparedItemsBefore.isNotEmpty()) {
-                    playerManager.insertAtBeginning(preparedItemsBefore)
-                }
+    private fun storePendingItems(items: List<VideoSearchItem>, startIndex: Int) {
+        items.forEachIndexed { index, item ->
+            if (index != startIndex) {
+                pendingPlaylistItems[index] = item
             }
         }
     }
     
     /**
-     * Add items to current playlist (only first parts; remaining parts lazy loaded when played)
+     * Add items to current playlist (URLs loaded lazily when needed)
      */
     fun addToPlaylist(items: List<VideoSearchItem>) {
-        viewModelScope.launch {
-            for (item in items) {
-                repository.prepareFirstPart(item).fold(
-                    onSuccess = { playlistItem ->
-                        playerManager.appendToPlaylist(listOf(playlistItem))
-                    },
-                    onFailure = {
-                        // Skip failed items
-                    }
-                )
-            }
+        val currentPlaylistSize = playerManager.playerState.value.playlist.size
+        val currentPendingMax = pendingPlaylistItems.keys.maxOrNull() ?: (currentPlaylistSize - 1)
+        
+        items.forEachIndexed { index, item ->
+            val newIndex = currentPendingMax + 1 + index
+            pendingPlaylistItems[newIndex] = item
         }
+        
+        val currentIndex = playerManager.playerState.value.currentIndex
+        preloadNextItem(currentIndex + 1)
     }
     
     /**
